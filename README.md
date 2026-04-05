@@ -89,14 +89,6 @@ asthma-risk-predictor/
 
 ---
 
-## Team
-
-| Person | Role |
-|--------|------|
-| Person 1 | Hardware setup, sensor firmware, ML model training |
-| Person 2 | Flask API, SQLite logging, drift detection |
-| Person 3 | Web dashboard frontend |
-
 ---
 
 ## Limitations
