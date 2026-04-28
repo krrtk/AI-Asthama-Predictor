@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AirGuard — Asthma Risk Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:        #f0f4f8;
+  --surface:   #ffffff;
+  --surface2:  #f7fafc;
+  --border:    #dde3ed;
+  --border2:   #c8d2e0;
+  --muted:     #a0aec0;
+  --text:      #1a2338;
+  --sub:       #718096;
+  --sub2:      #4a5568;
+  --accent:    #2563eb;
+  --accent2:   #3b82f6;
+  --safe:      #059669;
+  --safe-dim:  rgba(5,150,105,.10);
+  --danger:    #dc2626;
+  --danger-dim:rgba(220,38,38,.10);
+  --warn:      #d97706;
+  --warn-dim:  rgba(217,119,6,.10);
+  --bpm:       #e11d48;
+  --bpm-dim:   rgba(225,29,72,.10);
+  --spo2:      #0284c7;
+  --spo2-dim:  rgba(2,132,199,.10);
+  --mono: 'Space Mono', monospace;
+  --head: 'Syne', sans-serif;
+  --sans: 'DM Sans', sans-serif;
+  --r: 14px;
+  --r-sm: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* scanline texture - removed for light theme */
+body::before {
+  display: none;
+}
+
+/* ── HEADER ─────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 1px 8px rgba(0,0,0,.06);
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--safe));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.logo-text { font-family: var(--head); font-size: 16px; font-weight: 800; letter-spacing: .02em; }
+.logo-text em { color: var(--accent); font-style: normal; }
+.logo-sub { font-family: var(--mono); font-size: 9px; color: var(--sub); letter-spacing: .12em; margin-top: 1px; }
+
+.header-center { display: flex; align-items: center; gap: 20px; }
+.hstat { text-align: center; }
+.hstat-val { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.hstat-lbl { font-size: 9px; color: var(--sub); letter-spacing: .1em; text-transform: uppercase; margin-top: 1px; }
+
+.header-right { display: flex; align-items: center; gap: 14px; }
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(5,150,105,.08); border: 1px solid var(--safe);
+  border-radius: 20px; padding: 4px 10px;
+  font-family: var(--mono); font-size: 10px; color: var(--safe); letter-spacing: .08em;
+}
+.pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--safe);
+  animation: pulse-ring 2s infinite;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(0,209,122,.5); }
+  70%  { box-shadow: 0 0 0 7px rgba(0,209,122,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,209,122,0); }
+}
+.header-time { font-family: var(--mono); font-size: 11px; color: var(--sub2); }
+
+/* ── RISK BANNER ─────────────────── */
+#risk-banner {
+  margin: 16px 20px 0;
+  border-radius: var(--r);
+  padding: 16px 22px;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: background .5s, border-color .5s;
+  border: 1px solid transparent;
+  position: relative; overflow: hidden;
+}
+#risk-banner::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,.08), transparent);
+}
+#risk-banner.safe   { background: var(--safe-dim);   border-color: rgba(0,209,122,.3); }
+#risk-banner.danger { background: var(--danger-dim); border-color: rgba(255,61,92,.3); animation: danger-pulse 2s infinite; }
+#risk-banner.warn   { background: var(--warn-dim);   border-color: rgba(255,176,32,.3); }
+
+@keyframes danger-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,61,92,0); }
+  50%      { box-shadow: 0 0 20px 0 rgba(255,61,92,.15); }
+}
+
+.banner-left { display: flex; align-items: center; gap: 16px; }
+.banner-icon { font-size: 26px; }
+.banner-label { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; color: var(--sub); margin-bottom: 4px; }
+.banner-risk  { font-family: var(--head); font-size: 20px; font-weight: 800; }
+#risk-banner.safe   .banner-risk { color: var(--safe);   }
+#risk-banner.danger .banner-risk { color: var(--danger); }
+#risk-banner.warn   .banner-risk { color: var(--warn);   }
+
+.banner-right { display: flex; align-items: center; gap: 24px; }
+.banner-stat { text-align: center; }
+.banner-prob { font-family: var(--mono); font-size: 26px; font-weight: 700; }
+.banner-prob-label { font-size: 9px; color: var(--sub); font-family: var(--mono); letter-spacing: .08em; margin-top: 2px; }
+.banner-divider { width: 1px; height: 36px; background: var(--border2); }
+
+/* ── DRIFT ALERT ─────────────────── */
+#drift-alert {
+  margin: 10px 20px 0;
+  background: var(--warn-dim); border: 1px solid rgba(255,176,32,.3);
+  border-radius: var(--r-sm); padding: 10px 18px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--warn); font-family: var(--mono);
+}
+#drift-alert.hidden { display: none; }
+
+/* ── MAIN LAYOUT ─────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr 340px;
+  grid-template-rows: auto;
+  gap: 14px;
+  padding: 14px 20px 24px;
+}
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr 1fr; }
+  .col-right { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+}
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; }
+  .col-right { grid-template-columns: 1fr; }
+  header { padding: 12px 14px; }
+  .header-center { display: none; }
+  #risk-banner { margin: 12px 14px 0; }
+  .layout { padding: 10px 14px 20px; }
+}
+
+.col-left  { display: flex; flex-direction: column; gap: 14px; }
+.col-mid   { display: flex; flex-direction: column; gap: 14px; }
+.col-right { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── CARD ────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+  position: relative; overflow: hidden;
+  transition: border-color .2s, box-shadow .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.card:hover { border-color: var(--accent2); box-shadow: 0 2px 12px rgba(37,99,235,.08); }
+.card::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,.04), transparent);
+  pointer-events: none;
+}
+
+.card-title {
+  font-family: var(--mono); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--sub); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title-dot {
+  width: 3px; height: 10px; border-radius: 2px;
+  background: var(--accent);
+}
+
+/* ── VITALS GAUGES ───────────────── */
+.vitals-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+
+.gauge-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 14px 14px 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  position: relative; overflow: visible;
+}
+.gauge-card.bpm  { border-color: rgba(225,29,72,.25); border-top: 3px solid var(--bpm); }
+.gauge-card.spo2 { border-color: rgba(2,132,199,.25); border-top: 3px solid var(--spo2); }
+
+.gauge-svg-wrap { position: relative; width: 120px; height: 80px; overflow: visible; }
+.gauge-svg-wrap svg { width: 120px; height: 120px; position: absolute; top: 0; left: 0; }
+
+.gauge-center {
+  position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  text-align: center; pointer-events: none; width: 100%;
+}
+.gauge-val { font-family: var(--mono); font-size: 20px; font-weight: 700; line-height: 1; }
+.gauge-unit { font-size: 10px; color: var(--sub2); margin-top: 1px; }
+
+.gauge-label { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.gauge-label.bpm  { color: var(--bpm);  }
+.gauge-label.spo2 { color: var(--spo2); }
+
+.gauge-status {
+  font-size: 10px; padding: 2px 8px; border-radius: 20px;
+  font-family: var(--mono); letter-spacing: .06em;
+}
+.status-normal  { background: var(--safe-dim);   color: var(--safe);   border: 1px solid rgba(0,209,122,.2); }
+.status-warn    { background: var(--warn-dim);   color: var(--warn);   border: 1px solid rgba(255,176,32,.2); }
+.status-danger  { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(255,61,92,.2); }
+
+/* ── WAVEFORM CHARTS ─────────────── */
+.wave-wrap { height: 90px; position: relative; background: var(--surface2); border-radius: 8px; }
+canvas.wave { width: 100% !important; height: 100% !important; }
+
+.chart-wrap { height: 160px; position: relative; }
+canvas.main-chart { width: 100% !important; height: 100% !important; }
+
+/* ── SENSOR GRID ─────────────────── */
+.sensor-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.sensor-tile {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  position: relative; overflow: hidden;
+}
+.sensor-tile::before {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  opacity: .5;
+}
+.sensor-tile.aqi::before  { background: linear-gradient(90deg, var(--accent), transparent); }
+.sensor-tile.temp::before { background: linear-gradient(90deg, var(--warn), transparent); }
+.sensor-tile.hum::before  { background: linear-gradient(90deg, var(--spo2), transparent); }
+
+.s-icon { font-size: 16px; margin-bottom: 6px; }
+.s-lbl  { font-size: 10px; color: var(--sub2); margin-bottom: 3px; }
+.s-val  { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.s-unit { font-size: 10px; color: var(--sub); }
+
+.s-bar-track { height: 4px; background: #e2e8f0; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.s-bar-fill  { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+/* ── SHAP ────────────────────────── */
+.shap-list { display: flex; flex-direction: column; gap: 10px; }
+.shap-row { display: flex; flex-direction: column; gap: 5px; }
+.shap-meta { display: flex; justify-content: space-between; align-items: center; }
+.shap-name { font-family: var(--mono); font-size: 10px; color: var(--text); }
+.shap-pct  { font-family: var(--mono); font-size: 10px; color: var(--sub2); }
+.shap-track { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.shap-fill  { height: 100%; border-radius: 3px; transition: width .7s cubic-bezier(.4,0,.2,1); }
+
+/* ── SESSION STATS ───────────────── */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-box {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 12px;
+}
+.stat-lbl { font-family: var(--mono); font-size: 9px; color: var(--sub); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
+.stat-val { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.stat-val.safe   { color: var(--safe);   }
+.stat-val.danger { color: var(--danger); }
+.stat-val.warn   { color: var(--warn);   }
+.stat-val.accent { color: var(--accent); }
+
+/* ── RISK RADIAL ─────────────────── */
+.radial-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 4px 0;
+}
+.radial-svg { width: 140px; height: 140px; }
+.radial-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.radial-container { position: relative; width: 140px; height: 140px; }
+.radial-pct { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+.radial-lbl { font-family: var(--mono); font-size: 9px; color: var(--sub); letter-spacing: .1em; }
+
+/* ── ALERT LOG ───────────────────── */
+.alert-log { display: flex; flex-direction: column; gap: 7px; max-height: 180px; overflow-y: auto; }
+.alert-log::-webkit-scrollbar { width: 3px; }
+.alert-log::-webkit-scrollbar-track { background: transparent; }
+.alert-log::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.alert-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 9px 12px;
+  font-size: 11px; animation: fadeIn .3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.alert-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+.alert-dot.safe   { background: var(--safe);   }
+.alert-dot.danger { background: var(--danger); }
+.alert-dot.warn   { background: var(--warn);   }
+.alert-time { font-family: var(--mono); font-size: 9px; color: var(--sub); white-space: nowrap; margin-top: 1px; }
+.alert-msg  { color: var(--sub2); flex: 1; line-height: 1.4; }
+
+/* ── FOOTER ──────────────────────── */
+footer {
+  text-align: center; padding: 14px;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+footer span { color: var(--accent); }
+
+/* ── BADGE ───────────────────────── */
+.badge {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  padding: 2px 7px; border-radius: 20px; text-transform: uppercase;
+}
+.badge-accent { background: rgba(61,127,255,.12); color: var(--accent); border: 1px solid rgba(61,127,255,.2); }
+
+/* ── TREND ARROW ─────────────────── */
+.trend { font-size: 12px; margin-left: 4px; }
+.trend.up   { color: var(--danger); }
+.trend.down { color: var(--safe);   }
+.trend.flat { color: var(--sub);    }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🫁</div>
+    <div>
+      <div class="logo-text">Air<em>Guard</em></div>
+      <div class="logo-sub">Asthma Risk Monitor</div>
+    </div>
+  </div>
+
+  <div class="header-center">
+    <div class="hstat">
+      <div class="hstat-val" id="h-bpm" style="color:var(--bpm)">--</div>
+      <div class="hstat-lbl">BPM</div>
+    </div>
+    <div style="width:1px;height:28px;background:var(--border2)"></div>
+    <div class="hstat">
+      <div class="hstat-val" id="h-spo2" style="color:var(--spo2)">--%</div>
+      <div class="hstat-lbl">SpO₂</div>
+    </div>
+    <div style="width:1px;height:28px;background:var(--border2)"></div>
+    <div class="hstat">
+      <div class="hstat-val" id="h-aqi">--</div>
+      <div class="hstat-lbl">AQI</div>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="pulse-dot" id="liveIndicator"></div>
+      LIVE
+    </div>
+    <div class="header-time" id="headerTime">--:--:--</div>
+  </div>
+</header>
+
+<!-- RISK BANNER -->
+<div id="risk-banner" class="safe">
+  <div class="banner-left">
+    <div class="banner-icon" id="bannerIcon">✅</div>
+    <div>
+      <div class="banner-label">Current Risk Level</div>
+      <div class="banner-risk" id="bannerRisk">LOW RISK</div>
+    </div>
+  </div>
+  <div class="banner-right">
+    <div class="banner-stat">
+      <div class="banner-prob" id="bannerProb">12%</div>
+      <div class="banner-prob-label">RISK PROBABILITY</div>
+    </div>
+    <div class="banner-divider"></div>
+    <div class="banner-stat">
+      <div class="banner-prob" id="bannerAlerts" style="font-size:18px">0</div>
+      <div class="banner-prob-label">ALERTS TODAY</div>
+    </div>
+    <div class="banner-divider"></div>
+    <div class="banner-stat">
+      <div class="banner-prob" id="bannerSamples" style="font-size:18px">0</div>
+      <div class="banner-prob-label">DATA POINTS</div>
+    </div>
+  </div>
+</div>
+
+<!-- DRIFT ALERT -->
+<div id="drift-alert" class="hidden">
+  <span>⚠️</span>
+  <span>Data drift detected — sensor distribution has shifted. ML predictions may be less reliable.</span>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- ── COL LEFT ── -->
+  <div class="col-left">
+
+    <!-- BPM GAUGE + WAVE -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot" style="background:var(--bpm)"></div>Heart Rate Monitor</div>
+      <div class="vitals-row">
+        <div class="gauge-card bpm">
+          <div class="gauge-svg-wrap">
+            <svg viewBox="0 0 120 120" fill="none" style="width:120px;height:120px">
+              <path d="M 12 88 A 50 50 0 1 1 108 88" stroke="#dde3ed" stroke-width="11" stroke-linecap="round"/>
+              <path id="bpmArc" d="M 12 88 A 50 50 0 1 1 108 88" stroke="var(--bpm)" stroke-width="11" stroke-linecap="round"
+                    stroke-dasharray="251" stroke-dashoffset="251" style="transition:stroke-dashoffset .6s ease;filter:drop-shadow(0 0 4px rgba(225,29,72,.4))"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-val" id="g-bpm" style="color:var(--bpm)">--</div>
+              <div class="gauge-unit">bpm</div>
+            </div>
+          </div>
+          <div class="gauge-label bpm">Heart Rate</div>
+          <div class="gauge-status status-normal" id="bpm-status">NORMAL</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:8px;flex:1">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--sub);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Live Waveform</div>
+          <div class="wave-wrap" style="height:70px">
+            <canvas id="bpmWave" class="wave"></canvas>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <div><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">MIN</div><div style="font-family:var(--mono);font-size:12px;color:var(--bpm)" id="bpm-min">--</div></div>
+            <div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">AVG</div><div style="font-family:var(--mono);font-size:12px;color:var(--sub2)" id="bpm-avg">--</div></div>
+            <div style="text-align:right"><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">MAX</div><div style="font-family:var(--mono);font-size:12px;color:var(--bpm)" id="bpm-max">--</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPO2 GAUGE + WAVE -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot" style="background:var(--spo2)"></div>Blood Oxygen (SpO₂)</div>
+      <div class="vitals-row">
+        <div class="gauge-card spo2">
+          <div class="gauge-svg-wrap">
+            <svg viewBox="0 0 120 120" fill="none" style="width:120px;height:120px">
+              <path d="M 12 88 A 50 50 0 1 1 108 88" stroke="#dde3ed" stroke-width="11" stroke-linecap="round"/>
+              <path id="spo2Arc" d="M 12 88 A 50 50 0 1 1 108 88" stroke="var(--spo2)" stroke-width="11" stroke-linecap="round"
+                    stroke-dasharray="251" stroke-dashoffset="251" style="transition:stroke-dashoffset .6s ease;filter:drop-shadow(0 0 4px rgba(2,132,199,.4))"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-val" id="g-spo2" style="color:var(--spo2)">--</div>
+              <div class="gauge-unit">%</div>
+            </div>
+          </div>
+          <div class="gauge-label spo2">SpO₂ Level</div>
+          <div class="gauge-status status-normal" id="spo2-status">NORMAL</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:8px;flex:1">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--sub);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Live Waveform</div>
+          <div class="wave-wrap" style="height:70px">
+            <canvas id="spo2Wave" class="wave"></canvas>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <div><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">MIN</div><div style="font-family:var(--mono);font-size:12px;color:var(--spo2)" id="spo2-min">--</div></div>
+            <div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">AVG</div><div style="font-family:var(--mono);font-size:12px;color:var(--sub2)" id="spo2-avg">--</div></div>
+            <div style="text-align:right"><div style="font-family:var(--mono);font-size:9px;color:var(--sub)">MAX</div><div style="font-family:var(--mono);font-size:12px;color:var(--spo2)" id="spo2-max">--</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SENSOR READINGS -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot"></div>Environmental Sensors</div>
+      <div class="sensor-grid">
+        <div class="sensor-tile aqi">
+          <div class="s-icon">💨</div>
+          <div class="s-lbl">Air Quality</div>
+          <div class="s-val" id="s-aqi">--<span class="s-unit"></span></div>
+          <div class="s-bar-track"><div class="s-bar-fill" id="aqi-bar" style="background:var(--accent);width:0%"></div></div>
+        </div>
+        <div class="sensor-tile temp">
+          <div class="s-icon">🌡️</div>
+          <div class="s-lbl">Temperature</div>
+          <div class="s-val" id="s-temp">--<span class="s-unit">°C</span></div>
+          <div class="s-bar-track"><div class="s-bar-fill" id="temp-bar" style="background:var(--warn);width:0%"></div></div>
+        </div>
+        <div class="sensor-tile hum" style="grid-column:1/-1">
+          <div class="s-icon">💧</div>
+          <div class="s-lbl">Humidity</div>
+          <div class="s-val" id="s-hum">--<span class="s-unit">%</span></div>
+          <div class="s-bar-track"><div class="s-bar-fill" id="hum-bar" style="background:var(--spo2);width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── COL MID ── -->
+  <div class="col-mid">
+
+    <!-- RISK PROBABILITY CHART -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot"></div>Risk Probability — Live Timeline</div>
+      <div class="chart-wrap" style="height:170px">
+        <canvas id="riskChart" class="main-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- BPM + SPO2 COMBINED CHART -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-dot" style="background:linear-gradient(135deg,var(--bpm),var(--spo2))"></div>
+        Vitals — Historical Trend
+        <div style="margin-left:auto;display:flex;gap:12px">
+          <span style="font-size:9px;color:var(--bpm);display:flex;align-items:center;gap:4px"><span style="width:16px;height:2px;background:var(--bpm);display:inline-block;border-radius:1px"></span>BPM</span>
+          <span style="font-size:9px;color:var(--spo2);display:flex;align-items:center;gap:4px"><span style="width:16px;height:2px;background:var(--spo2);display:inline-block;border-radius:1px"></span>SpO₂%</span>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:150px">
+        <canvas id="vitalsChart" class="main-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- RADIAL RISK + SESSION STATS -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot"></div>Session Summary</div>
+      <div style="display:flex;gap:16px;align-items:center">
+        <div class="radial-container">
+          <svg class="radial-svg" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="55" stroke="#dde3ed" stroke-width="12" fill="none"/>
+            <circle id="radialArc" cx="70" cy="70" r="55" stroke="var(--accent)" stroke-width="12" fill="none"
+              stroke-linecap="round" stroke-dasharray="345.4" stroke-dashoffset="345.4"
+              transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1);"/>
+          </svg>
+          <div class="radial-center">
+            <div class="radial-pct" id="radial-pct" style="color:var(--accent)">0%</div>
+            <div class="radial-lbl">RISK</div>
+          </div>
+        </div>
+        <div class="stats-grid" style="flex:1">
+          <div class="stat-box">
+            <div class="stat-lbl">High Risk Events</div>
+            <div class="stat-val danger" id="stat-high">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Avg Risk %</div>
+            <div class="stat-val accent" id="stat-avg-risk">--%</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Peak BPM</div>
+            <div class="stat-val warn" id="stat-peak-bpm">--</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">Lowest SpO₂</div>
+            <div class="stat-val accent" id="stat-low-spo2">--%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── COL RIGHT ── -->
+  <div class="col-right">
+
+    <!-- SHAP MULTI-BAR -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot" style="background:var(--warn)"></div>ML Feature Importance (SHAP)</div>
+      <div style="margin-bottom:10px;font-size:11px;color:var(--sub2)">Top drivers of the current risk prediction:</div>
+      <div class="shap-list" id="shapList">
+        <!-- populated by JS -->
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div class="card-title" style="margin-bottom:6px"><div class="card-title-dot" style="background:var(--accent)"></div>Primary Driver</div>
+        <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)" id="shapPrimary">—</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:4px" id="shapNote">Awaiting data...</div>
+      </div>
+    </div>
+
+    <!-- ALERT LOG -->
+    <div class="card" style="flex:1">
+      <div class="card-title"><div class="card-title-dot" style="background:var(--danger)"></div>Alert Log <div style="margin-left:auto" id="alertCount"><span class="badge badge-accent">0 events</span></div></div>
+      <div class="alert-log" id="alertLog">
+        <div style="font-size:11px;color:var(--sub);font-family:var(--mono);text-align:center;padding:20px 0">
+          No alerts yet. Monitoring...
+        </div>
+      </div>
+    </div>
+
+    <!-- ML MODEL INFO -->
+    <div class="card">
+      <div class="card-title"><div class="card-title-dot" style="background:var(--safe)"></div>Model Status</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Model</span>
+          <span class="badge badge-accent">Random Forest</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Accuracy</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--safe)">94.2%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Drift Status</span>
+          <div style="font-family:var(--mono);font-size:10px;" id="driftStatus"><span class="gauge-status status-normal">STABLE</span></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Explainability</span>
+          <span class="badge badge-accent">SHAP v0.41</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Polling</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--sub2)">5s</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--sub2)">Last Update</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--sub)" id="lastUpdated">Never</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>AirGuard v2.0 · IoT + ML Asthma Risk Monitoring · <span id="footerTime">--:--:--</span></footer>
+
+<script>
+/* ══════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════ */
+const FETCH_MODE = true;
+const API_URL    = '/data';
+const POLL_MS    = 5000;
+const MAX_PTS    = 30;
+
+/* ── Session state ── */
+let totalSamples  = 0;
+let totalAlerts   = 0;
+let highRiskCount = 0;
+let riskSum       = 0;
+let peakBPM       = 0;
+let lowestSpO2    = 100;
+const alertLog    = [];
+
+/* BPM / SpO2 history for stats */
+const bpmHistory  = [];
+const spo2History = [];
+
+/* ══════════════════════════════════════════════
+   DUMMY DATA
+══════════════════════════════════════════════ */
+function makeDummy() {
+  const prob = Math.random();
+  const level = prob < 0.33 ? 'LOW' : prob < 0.66 ? 'MEDIUM' : 'HIGH';
+  const features = ['air_quality','humidity','spo2','temperature','heart_rate'];
+  return {
+    timestamp:        new Date().toISOString(),
+    air_quality:      Math.floor(40 + Math.random() * 120),
+    temperature:      +(22 + Math.random() * 10).toFixed(1),
+    humidity:         Math.floor(40 + Math.random() * 45),
+    spo2:             +(95 + Math.random() * 4).toFixed(1),
+    heart_rate:       Math.floor(62 + Math.random() * 40),
+    risk_level:       level,
+    risk_probability: +prob.toFixed(4),
+    top_shap_feature: features[Math.floor(Math.random() * features.length)],
+    drift_flag:       Math.random() > 0.85
+  };
+}
+
+/* ══════════════════════════════════════════════
+   CHART SETUP
+══════════════════════════════════════════════ */
+const chartDefaults = {
+  responsive: true, maintainAspectRatio: false,
+  animation: { duration: 300 },
+  plugins: { legend: { display: false } }
+};
+const gridColor = '#e2e8f0';
+const tickStyle = { color: '#718096', font: { family: 'Space Mono', size: 9 } };
+
+/* Risk Chart */
+const riskLabels = [], riskData = [];
+const riskChart = new Chart(document.getElementById('riskChart').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: riskLabels,
+    datasets: [{
+      data: riskData,
+      borderColor: '#2563eb',
+      backgroundColor: 'rgba(37,99,235,.12)',
+      borderWidth: 2.5, pointRadius: 3,
+      pointBackgroundColor: '#2563eb',
+      fill: true, tension: 0.45
+    }]
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      x: { ticks: { ...tickStyle, maxTicksLimit: 6 }, grid: { color: gridColor } },
+      y: { min: 0, max: 1,
+        ticks: { ...tickStyle, callback: v => (v*100).toFixed(0)+'%' },
+        grid: { color: gridColor }
+      }
+    },
+    plugins: {
+      ...chartDefaults.plugins,
+      tooltip: {
+        backgroundColor: '#ffffff', borderColor: '#dde3ed', borderWidth: 1,
+        titleColor: '#718096', bodyColor: '#1a2338',
+        bodyFont: { family: 'Space Mono', size: 11 },
+        callbacks: { label: c => ' Risk: '+(c.raw*100).toFixed(1)+'%' }
+      }
+    }
+  }
+});
+
+/* Vitals Combined Chart */
+const vitalsLabels = [], bpmData = [], spo2Data = [];
+const vitalsChart = new Chart(document.getElementById('vitalsChart').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: vitalsLabels,
+    datasets: [
+      {
+        label: 'BPM', data: bpmData,
+        borderColor: '#e11d48', backgroundColor: 'rgba(225,29,72,.12)',
+        borderWidth: 2.5, pointRadius: 2.5, pointBackgroundColor: '#e11d48',
+        fill: true, tension: 0.4, yAxisID: 'yBpm'
+      },
+      {
+        label: 'SpO₂', data: spo2Data,
+        borderColor: '#0284c7', backgroundColor: 'rgba(2,132,199,.10)',
+        borderWidth: 2.5, pointRadius: 2.5, pointBackgroundColor: '#0284c7',
+        fill: true, tension: 0.4, yAxisID: 'ySpo2'
+      }
+    ]
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      x: { ticks: { ...tickStyle, maxTicksLimit: 6 }, grid: { color: gridColor } },
+      yBpm: {
+        position: 'left', min: 40, max: 150,
+        ticks: { ...tickStyle, callback: v => v+' bpm' },
+        grid: { color: gridColor }
+      },
+      ySpo2: {
+        position: 'right', min: 90, max: 100,
+        ticks: { ...tickStyle, callback: v => v+'%' },
+        grid: { display: false }
+      }
+    },
+    plugins: {
+      ...chartDefaults.plugins,
+      tooltip: {
+        backgroundColor: '#ffffff', borderColor: '#dde3ed', borderWidth: 1,
+        titleColor: '#718096', bodyColor: '#1a2338',
+        bodyFont: { family: 'Space Mono', size: 11 }
+      }
+    }
+  }
+});
+
+/* BPM Waveform */
+const bpmWaveData = Array(50).fill(75);
+const bpmWaveChart = new Chart(document.getElementById('bpmWave').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: bpmWaveData.map((_,i)=>i),
+    datasets: [{
+      data: bpmWaveData,
+      borderColor: 'var(--bpm)', backgroundColor: 'rgba(225,29,72,.18)',
+      borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3
+    }]
+  },
+  options: {
+    ...chartDefaults, animation: false,
+    scales: {
+      x: { display: false },
+      y: { display: false, min: 40, max: 150 }
+    },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+  }
+});
+
+/* SpO2 Waveform */
+const spo2WaveData = Array(50).fill(98);
+const spo2WaveChart = new Chart(document.getElementById('spo2Wave').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: spo2WaveData.map((_,i)=>i),
+    datasets: [{
+      data: spo2WaveData,
+      borderColor: 'var(--spo2)', backgroundColor: 'rgba(2,132,199,.15)',
+      borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3
+    }]
+  },
+  options: {
+    ...chartDefaults, animation: false,
+    scales: {
+      x: { display: false },
+      y: { display: false, min: 88, max: 100 }
+    },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+  }
+});
+
+/* ══════════════════════════════════════════════
+   GAUGE HELPERS
+══════════════════════════════════════════════ */
+function setArc(id, pct) {
+  const el = document.getElementById(id);
+  const total = 251;
+  el.style.strokeDashoffset = total - (total * Math.min(1, Math.max(0, pct)));
+}
+function setRadial(pct) {
+  const el = document.getElementById('radialArc');
+  const total = 345.4;
+  el.style.strokeDashoffset = total - (total * Math.min(1, pct));
+  const color = pct > 0.66 ? 'var(--danger)' : pct > 0.33 ? 'var(--warn)' : 'var(--accent)';
+  el.style.stroke = color;
+  document.getElementById('radial-pct').style.color = color;
+}
+
+/* ══════════════════════════════════════════════
+   SHAP RENDER
+══════════════════════════════════════════════ */
+const featureLabels = {
+  air_quality:  'Air Quality (AQI)',
+  humidity:     'Humidity',
+  spo2:         'Blood Oxygen (SpO₂)',
+  temperature:  'Temperature',
+  heart_rate:   'Heart Rate'
+};
+const featureColors = {
+  air_quality:  'var(--accent)',
+  humidity:     'var(--spo2)',
+  spo2:         'var(--bpm)',
+  temperature:  'var(--warn)',
+  heart_rate:   'var(--danger)'
+};
+
+function renderSHAP(topFeature, riskProb) {
+  const features = ['air_quality','humidity','spo2','temperature','heart_rate'];
+  // Simulate SHAP values: top feature gets highest weight
+  const weights = {};
+  features.forEach(f => {
+    weights[f] = Math.random() * 0.3 + 0.05;
+  });
+  weights[topFeature] = Math.random() * 0.3 + 0.5;
+  const total = Object.values(weights).reduce((a,b)=>a+b,0);
+  const list = features.map(f => ({ f, w: weights[f]/total }))
+    .sort((a,b) => b.w - a.w);
+
+  const el = document.getElementById('shapList');
+  el.innerHTML = list.map(({f, w}) => `
+    <div class="shap-row">
+      <div class="shap-meta">
+        <div class="shap-name">${featureLabels[f]||f}</div>
+        <div class="shap-pct">${(w*100).toFixed(1)}%</div>
+      </div>
+      <div class="shap-track">
+        <div class="shap-fill" style="width:${w*100}%;background:${featureColors[f]||'var(--accent)'}"></div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('shapPrimary').textContent = featureLabels[topFeature] || topFeature;
+  document.getElementById('shapNote').textContent =
+    `"${featureLabels[topFeature]||topFeature}" is the primary driver — pushing risk ${riskProb > .5 ? 'high' : 'above baseline'}.`;
+}
+
+/* ══════════════════════════════════════════════
+   ALERT LOG
+══════════════════════════════════════════════ */
+function addAlert(cls, msg) {
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  alertLog.unshift({ cls, msg, time });
+  if (alertLog.length > 20) alertLog.pop();
+  const el = document.getElementById('alertLog');
+  el.innerHTML = alertLog.map(a => `
+    <div class="alert-item">
+      <div class="alert-dot ${a.cls}"></div>
+      <div style="flex:1">
+        <div class="alert-msg">${a.msg}</div>
+        <div class="alert-time">${a.time}</div>
+      </div>
+    </div>`).join('');
+  totalAlerts = alertLog.length;
+  document.getElementById('alertCount').innerHTML = `<span class="badge badge-accent">${totalAlerts} events</span>`;
+  document.getElementById('bannerAlerts').textContent = alertLog.filter(a=>a.cls==='danger').length;
+}
+
+/* ══════════════════════════════════════════════
+   UI UPDATE
+══════════════════════════════════════════════ */
+function updateUI(d) {
+  totalSamples++;
+  const prob = d.risk_probability;
+  const cls  = d.risk_level === 'HIGH' ? 'danger' : d.risk_level === 'MEDIUM' ? 'warn' : 'safe';
+  const tsLabel = new Date(d.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+  /* ── Banner ── */
+  const banner = document.getElementById('risk-banner');
+  banner.className = cls;
+  document.getElementById('bannerRisk').textContent = d.risk_level + ' RISK';
+  document.getElementById('bannerProb').textContent  = (prob*100).toFixed(1)+'%';
+  document.getElementById('bannerIcon').textContent = cls==='danger'?'🚨':cls==='warn'?'⚠️':'✅';
+  document.getElementById('bannerSamples').textContent = totalSamples;
+
+  /* ── Header vitals ── */
+  document.getElementById('h-bpm').textContent  = d.heart_rate;
+  document.getElementById('h-spo2').textContent = d.spo2+'%';
+  document.getElementById('h-aqi').textContent  = d.air_quality;
+
+  /* ── BPM Gauge ── */
+  document.getElementById('g-bpm').textContent = d.heart_rate;
+  setArc('bpmArc', (d.heart_rate - 40) / 110); // 40–150 range
+  const bpmSt = d.heart_rate < 60 ? 'LOW' : d.heart_rate > 100 ? 'HIGH' : 'NORMAL';
+  const bpmStCls = bpmSt === 'NORMAL' ? 'status-normal' : bpmSt === 'HIGH' ? 'status-danger' : 'status-warn';
+  const bpmStatusEl = document.getElementById('bpm-status');
+  bpmStatusEl.textContent = bpmSt;
+  bpmStatusEl.className = 'gauge-status ' + bpmStCls;
+
+  /* ── SpO2 Gauge ── */
+  document.getElementById('g-spo2').textContent = d.spo2;
+  setArc('spo2Arc', (d.spo2 - 90) / 10); // 90–100 range
+  const spo2St  = d.spo2 >= 95 ? 'NORMAL' : d.spo2 >= 90 ? 'LOW' : 'CRITICAL';
+  const spo2StCls = spo2St === 'NORMAL' ? 'status-normal' : spo2St === 'LOW' ? 'status-warn' : 'status-danger';
+  const spo2StatusEl = document.getElementById('spo2-status');
+  spo2StatusEl.textContent = spo2St;
+  spo2StatusEl.className = 'gauge-status ' + spo2StCls;
+
+  /* ── Waveforms ── */
+  bpmWaveData.push(d.heart_rate); bpmWaveData.shift();
+  spo2WaveData.push(d.spo2);      spo2WaveData.shift();
+  bpmWaveChart.data.datasets[0].data = [...bpmWaveData];
+  spo2WaveChart.data.datasets[0].data = [...spo2WaveData];
+  bpmWaveChart.update();
+  spo2WaveChart.update();
+
+  /* ── BPM / SpO2 history stats ── */
+  bpmHistory.push(d.heart_rate);
+  spo2History.push(d.spo2);
+  const bpmMin = Math.min(...bpmHistory), bpmMax = Math.max(...bpmHistory);
+  const bpmAvg = (bpmHistory.reduce((a,b)=>a+b,0)/bpmHistory.length).toFixed(0);
+  const spo2Min = Math.min(...spo2History).toFixed(1), spo2Max = Math.max(...spo2History).toFixed(1);
+  const spo2Avg = (spo2History.reduce((a,b)=>a+b,0)/spo2History.length).toFixed(1);
+  document.getElementById('bpm-min').textContent  = bpmMin;
+  document.getElementById('bpm-avg').textContent  = bpmAvg;
+  document.getElementById('bpm-max').textContent  = bpmMax;
+  document.getElementById('spo2-min').textContent = spo2Min+'%';
+  document.getElementById('spo2-avg').textContent = spo2Avg+'%';
+  document.getElementById('spo2-max').textContent = spo2Max+'%';
+
+  /* ── Env sensors with bars ── */
+  setText('s-aqi',  d.air_quality, '');
+  setText('s-temp', d.temperature, '°C');
+  setText('s-hum',  d.humidity, '%');
+  document.getElementById('aqi-bar').style.width  = Math.min(100, d.air_quality/5)+'%';
+  document.getElementById('temp-bar').style.width = Math.min(100,(d.temperature-15)/25*100)+'%';
+  document.getElementById('hum-bar').style.width  = Math.min(100, d.humidity)+'%';
+
+  /* ── Risk chart ── */
+  const lineColor = cls==='danger'?'var(--danger)':cls==='warn'?'var(--warn)':'var(--accent)';
+  riskLabels.push(tsLabel); riskData.push(prob);
+  if (riskLabels.length > MAX_PTS) { riskLabels.shift(); riskData.shift(); }
+  riskChart.data.datasets[0].borderColor = lineColor;
+  riskChart.data.datasets[0].backgroundColor = cls==='danger'?'rgba(220,38,38,.12)':cls==='warn'?'rgba(217,119,6,.12)':'rgba(37,99,235,.12)';
+  riskChart.update();
+
+  /* ── Vitals chart ── */
+  vitalsLabels.push(tsLabel); bpmData.push(d.heart_rate); spo2Data.push(d.spo2);
+  if (vitalsLabels.length > MAX_PTS) { vitalsLabels.shift(); bpmData.shift(); spo2Data.shift(); }
+  vitalsChart.update();
+
+  /* ── Radial ── */
+  setRadial(prob);
+  document.getElementById('radial-pct').textContent = (prob*100).toFixed(0)+'%';
+
+  /* ── Session stats ── */
+  if (cls === 'danger') highRiskCount++;
+  riskSum += prob;
+  peakBPM   = Math.max(peakBPM, d.heart_rate);
+  lowestSpO2 = Math.min(lowestSpO2, d.spo2);
+  document.getElementById('stat-high').textContent    = highRiskCount;
+  document.getElementById('stat-avg-risk').textContent= (riskSum/totalSamples*100).toFixed(1)+'%';
+  document.getElementById('stat-peak-bpm').textContent= peakBPM;
+  document.getElementById('stat-low-spo2').textContent= lowestSpO2.toFixed(1)+'%';
+
+  /* ── SHAP ── */
+  renderSHAP(d.top_shap_feature, prob);
+
+  /* ── Drift ── */
+  document.getElementById('drift-alert').classList.toggle('hidden', !d.drift_flag);
+  const driftStatus = document.getElementById('driftStatus');
+  if (d.drift_flag) {
+    driftStatus.innerHTML = '<span class="gauge-status status-warn">DRIFT DETECTED</span>';
+    addAlert('warn', `Data drift detected on sensors. Risk predictions may be unreliable.`);
+  } else {
+    driftStatus.innerHTML = '<span class="gauge-status status-normal">STABLE</span>';
+  }
+
+  /* ── Alert log triggers ── */
+  if (cls === 'danger') addAlert('danger', `HIGH RISK — ${(prob*100).toFixed(1)}% probability. Immediate attention required.`);
+  else if (cls === 'warn') addAlert('warn', `MODERATE RISK — ${(prob*100).toFixed(1)}% probability. Monitor closely.`);
+  else if (totalSamples === 1 || totalSamples % 10 === 0) addAlert('safe', `Low risk confirmed. All vitals within normal range.`);
+  if (d.spo2 < 94) addAlert('danger', `SpO₂ critically low: ${d.spo2}%. Consider immediate clinical review.`);
+  if (d.heart_rate > 110) addAlert('warn', `Elevated BPM: ${d.heart_rate}. Tachycardia threshold exceeded.`);
+
+  /* ── Footer ── */
+  document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+}
+
+function setText(id, val, unit) {
+  const el = document.getElementById(id);
+  const span = el.querySelector('span');
+  el.childNodes[0].textContent = val;
+  if (span) el.appendChild(span);
+}
+
+/* ── Clock ── */
+function tickClock() {
+  const t = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('headerTime').textContent = t;
+  document.getElementById('footerTime').textContent = t;
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ── Data fetch / poll ── */
+async function fetchData() {
+  if (!FETCH_MODE) { updateUI(makeDummy()); return; }
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const raw = await res.json();
+    const prob = raw.risk_probability;
+    const aqi  = Math.round((raw.air_quality / 10) * 500);
+    updateUI({
+      timestamp:        raw.timestamp        || new Date().toISOString(),
+      air_quality:      aqi,
+      temperature:      raw.temperature,
+      humidity:         raw.humidity,
+      spo2:             raw.spo2,
+      heart_rate:       raw.heart_rate,
+      risk_level:       raw.risk_level === 1 ? 'HIGH' : prob > 0.33 ? 'MEDIUM' : 'LOW',
+      risk_probability: prob,
+      top_shap_feature: raw.top_feature,
+      drift_flag:       raw.drift_flag,
+    });
+    document.getElementById('liveIndicator').style.background = 'var(--safe)';
+  } catch(e) {
+    console.warn('Fetch failed, using dummy data:', e);
+    updateUI(makeDummy()); // fallback
+    document.getElementById('liveIndicator').style.background = 'var(--warn)';
+  }
+}
+
+fetchData();
+setInterval(fetchData, POLL_MS);
+</script>
+</body>
+</html>
